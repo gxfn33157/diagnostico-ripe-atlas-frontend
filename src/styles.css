@@ -1,0 +1,15 @@
+body {
+  background: #0f172a;
+  color: #e5e7eb;
+  font-family: Arial, sans-serif;
+}
+.container {
+  max-width: 900px;
+  margin: auto;
+  padding: 20px;
+}
+input, select, button {
+  width: 100%;
+  margin: 6px 0;
+  padding: 8px;
+}
