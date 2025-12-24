@@ -41,13 +41,36 @@ button {
   background: #e74c3c;
 }
 
+.diagnostic {
+  margin-top: 20px;
+  padding: 15px;
+  border-radius: 6px;
+  font-weight: bold;
+}
+
+.diagnostic.ok {
+  background: #d4edda;
+  color: #155724;
+}
+
+.diagnostic.warn {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.diagnostic.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 20px;
 }
 
-th, td {
+th,
+td {
   border: 1px solid #ccc;
   padding: 8px;
 }
@@ -56,13 +79,4 @@ td.ok {
   color: green;
 }
 
-td.warn {
-  color: orange;
-}
-
-pre {
-  background: #111;
-  color: #0f0;
-  padding: 15px;
-  overflow-x: auto;
-}
+td.w
