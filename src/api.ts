@@ -1,16 +1,18 @@
-const API_BASE = 'https://diagnostico-backend-samz.onrender.com/diagnostico';
+export async function diagnosticarDominio(dominio: string) {
+  const response = await fetch(
+    "https://diagnostico-backend-vercel.vercel.app/api/detector",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ dominio })
+    }
+  );
 
-export async function diagnosticar(dominio: string, traceroute: boolean) {
-  const response = await fetch(`${API_BASE}/`, {  // <--- rota correta
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dominio, traceroute }) // usar mesmo payload do backend
-  });
+  if (!response.ok) {
+    throw new Error("Erro ao executar diagnóstico");
+  }
 
-  const text = await response.text();
-  console.log('Status do backend:', response.status);
-  console.log('Resposta do backend:', text);
-
-  if (!response.ok) throw new Error('Erro ao executar diagnóstico');
-  return JSON.parse(text);
+  return response.json();
 }
