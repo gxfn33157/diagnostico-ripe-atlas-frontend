@@ -2,11 +2,33 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Diagnóstico RIPE Atlas</title>
+    <title>Diagnóstico de Conectividade</title>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <h1>Diagnóstico de Acesso</h1>
+
+    <input id="dominio" placeholder="ex: google.com" />
+    <button id="btn">Diagnosticar</button>
+
+    <pre id="resultado">Aguardando...</pre>
+
+    <script type="module">
+      import { diagnosticarDominio } from "/src/api.ts";
+
+      const btn = document.getElementById("btn");
+      const resultado = document.getElementById("resultado");
+
+      btn.addEventListener("click", async () => {
+        const dominio = document.getElementById("dominio").value;
+        resultado.textContent = "Executando diagnóstico...";
+
+        try {
+          const data = await diagnosticarDominio(dominio);
+          resultado.textContent = JSON.stringify(data, null, 2);
+        } catch (e) {
+          resultado.textContent = "Erro ao executar diagnóstico";
+        }
+      });
+    </script>
   </body>
 </html>
