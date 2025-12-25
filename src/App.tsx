@@ -14,31 +14,19 @@ interface TCPResult {
   latency_ms: number | null;
 }
 
-interface GlobalPingProbe {
-  continente: string;
-  pais: string;
-  cidade: string;
-  isp: string;
-  status: string;
-  rtt_ms: number | null;
-}
-
-interface GlobalPingResult {
-  measurement_id: string;
-  probes: GlobalPingProbe[];
-}
-
 interface DiagnosticoResponse {
   dominio: string;
   status: string;
   origem: string;
   dns: DNSRecord[];
   tcp: TCPResult;
-  globalping?: GlobalPingResult;
+  globalping?: {
+    measurement_id: string;
+  };
   timestamp: string;
 }
 
-interface GlobalPingSummaryItem {
+interface GlobalpingProbe {
   continent: string;
   country: string;
   city: string;
@@ -50,14 +38,11 @@ interface GlobalPingSummaryItem {
 function App() {
   const [dominio, setDominio] = useState("");
   const [resultado, setResultado] = useState<DiagnosticoResponse | null>(null);
-  const [globalping, setGlobalping] = useState<GlobalPingSummaryItem[]>([]);
-  const [statusGeral, setStatusGeral] = useState<
-    "OK" | "Instável" | "Indisponível" | null
-  >(null);
+  const [globalping, setGlobalping] = useState<GlobalpingProbe[]>([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const pollingRef = useRef<number | null>(null);
+  const intervalRef = useRef<number | null>(null);
 
   async function diagnosticar() {
     if (!dominio) return;
@@ -66,7 +51,6 @@ function App() {
     setErro(null);
     setResultado(null);
     setGlobalping([]);
-    setStatusGeral(null);
 
     try {
       const res = await fetch(
@@ -84,7 +68,7 @@ function App() {
       setResultado(data);
 
       if (data.globalping?.measurement_id) {
-        iniciarPollingGlobalping(data.globalping.measurement_id);
+        iniciarPolling(data.globalping.measurement_id);
       }
     } catch {
       setErro("Erro ao executar diagnóstico");
@@ -93,10 +77,10 @@ function App() {
     }
   }
 
-  function iniciarPollingGlobalping(measurementId: string) {
-    if (pollingRef.current) clearInterval(pollingRef.current);
+  function iniciarPolling(measurementId: string) {
+    if (intervalRef.current) clearInterval(intervalRef.current);
 
-    pollingRef.current = window.setInterval(async () => {
+    intervalRef.current = window.setInterval(async () => {
       try {
         const res = await fetch(
           `https://diagnostico-backend-vercel.vercel.app/api/globalping-summary/${measurementId}`
@@ -107,40 +91,16 @@ function App() {
         const data = await res.json();
 
         if (data.status === "finished") {
-          clearInterval(pollingRef.current!);
-
-          const probes: GlobalPingSummaryItem[] = data.summary.map((p: any) => ({
-            continent: p.continent,
-            country: p.country,
-            city: p.city,
-            isp: p.isp,
-            status: p.status,
-            rtt_ms: p.rtt_ms ?? null,
-          }));
-
-          setGlobalping(probes);
-          calcularStatusGeral(probes);
+          clearInterval(intervalRef.current!);
+          setGlobalping(data.summary);
         }
-      } catch {
-        // ignora erro temporário
-      }
+      } catch {}
     }, 5000);
-  }
-
-  function calcularStatusGeral(probes: GlobalPingSummaryItem[]) {
-    const total = probes.length;
-    const falhas = probes.filter(
-      (p) => p.status !== "finished" || p.rtt_ms === null
-    ).length;
-
-    if (falhas === 0) setStatusGeral("OK");
-    else if (falhas / total < 0.4) setStatusGeral("Instável");
-    else setStatusGeral("Indisponível");
   }
 
   useEffect(() => {
     return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
 
@@ -150,7 +110,6 @@ function App() {
 
       <div className="form">
         <input
-          type="text"
           placeholder="ex: youtube.com"
           value={dominio}
           onChange={(e) => setDominio(e.target.value)}
@@ -162,15 +121,9 @@ function App() {
 
       {erro && <p className="error">{erro}</p>}
 
-      {statusGeral && (
-        <div className={`status-geral ${statusGeral.toLowerCase()}`}>
-          Status Geral: {statusGeral}
-        </div>
-      )}
-
       {globalping.length > 0 && (
         <>
-          <h3>Globalping – Teste Global</h3>
+          <h3>Globalping — Teste Global</h3>
 
           <table>
             <thead>
