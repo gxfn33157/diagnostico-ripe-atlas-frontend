@@ -1,82 +1,67 @@
-const BACKEND = "https://diagnostico-backend-vercel.vercel.app";
+const API_BASE = "https://diagnostico-backend-vercel.vercel.app/api";
 
-/**
- * Função principal chamada pelo site
- */
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export async function diagnosticarDominio(dominio: string) {
-  // 1️⃣ Dispara diagnóstico inicial
-  const resp = await fetch(`${BACKEND}/api/detector`, {
+  // 1️⃣ Dispara o diagnóstico
+  const startResp = await fetch(`${API_BASE}/detector`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dominio }),
   });
 
-  if (!resp.ok) {
-    throw new Error("Erro ao iniciar diagnóstico");
+  if (!startResp.ok) {
+    throw new Error("Falha ao iniciar diagnóstico");
   }
 
-  const inicial = await resp.json();
-  console.log("Resposta inicial:", inicial);
+  let data = await startResp.json();
 
-  // Se não houver globalping, retorna direto
-  if (!inicial.globalping?.measurement_id) {
-    return inicial;
+  console.log("Resposta inicial:", data);
+
+  // 2️⃣ Se não precisar aguardar, retorna direto
+  if (data.status !== "processing" || !data.globalping?.measurement_id) {
+    return data;
   }
 
-  const measurementId = inicial.globalping.measurement_id;
+  const measurementId = data.globalping.measurement_id;
 
-  // 2️⃣ Aguarda o Globalping finalizar (polling)
-  const resumo = await aguardarGlobalping(measurementId);
+  // 3️⃣ Polling por até 30s
+  const timeoutMs = 30000;
+  const intervalMs = 5000;
+  const startTime = Date.now();
 
-  // 3️⃣ Retorna tudo consolidado
-  return {
-    ...inicial,
-    ...resumo,
-  };
-}
+  while (Date.now() - startTime < timeoutMs) {
+    await sleep(intervalMs);
 
-/**
- * Aguarda a finalização do Globalping
- */
-async function aguardarGlobalping(
-  measurementId: string,
-  tentativas = 10,
-  intervaloMs = 5000
-): Promise<any> {
-  for (let i = 1; i <= tentativas; i++) {
-    console.log(`🔄 Verificando Globalping (${i}/${tentativas})`);
-
-    const resp = await fetch(
-      `${BACKEND}/api/globalping-summary/${measurementId}`
+    const summaryResp = await fetch(
+      `${API_BASE}/globalping-summary/${measurementId}`
     );
 
-    if (resp.ok) {
-      const data = await resp.json();
+    if (!summaryResp.ok) continue;
 
-      if (data.status === "finished") {
-        console.log("✅ Globalping finalizado");
-        return {
-          continentes: data.continentes ?? {},
-          status_geral: data.status_geral ?? "OK",
-          problema_rota_internacional:
-            data.problema_rota_internacional ?? false,
-          texto_noc: data.texto_noc ?? "",
-          globalping: data,
-        };
-      }
+    const summaryData = await summaryResp.json();
+
+    console.log("Polling Globalping:", summaryData);
+
+    if (summaryData.status === "finished") {
+      return {
+        ...data,
+        status: "finished",
+        status_geral: "OK",
+        globalping: summaryData,
+        texto_noc: "",
+      };
     }
-
-    // Aguarda antes da próxima tentativa
-    await new Promise((r) => setTimeout(r, intervaloMs));
   }
 
-  // Timeout controlado (UX amigável)
+  // 4️⃣ Timeout amigável
   return {
+    ...data,
+    status: "timeout",
     status_geral: "Instável",
     texto_noc:
-      "Medição Globalping ainda em processamento. Aguarde alguns segundos e tente novamente.",
-    continentes: {},
-    globalping: {},
-    problema_rota_internacional: false,
+      "Medição Globalping demorou mais que o esperado. Tente novamente em alguns instantes.",
   };
 }
