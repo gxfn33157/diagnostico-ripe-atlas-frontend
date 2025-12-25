@@ -1,34 +1,52 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Diagnóstico de Conectividade</title>
-  </head>
-  <body>
-    <h1>Diagnóstico de Acesso</h1>
+<body>
+  <h1>Diagnóstico de Acesso</h1>
 
-    <input id="dominio" placeholder="ex: google.com" />
-    <button id="btn">Diagnosticar</button>
+  <input id="dominio" placeholder="ex: google.com" />
+  <button id="btn">Diagnosticar</button>
 
-    <pre id="resultado">Aguardando...</pre>
+  <div id="loading" style="display:none; margin-top:10px;">
+    🔄 Executando diagnóstico global...
+    <div
+      id="barra"
+      style="width:0%; height:10px; background:#4caf50; margin-top:5px;"
+    ></div>
+  </div>
 
-    <script type="module">
-      import { diagnosticarDominio } from "/src/api.ts";
+  <pre id="resultado">Aguardando...</pre>
 
-      const btn = document.getElementById("btn");
-      const resultado = document.getElementById("resultado");
+  <script type="module">
+    import { diagnosticarDominio } from "/src/api.ts";
 
-      btn.addEventListener("click", async () => {
-        const dominio = document.getElementById("dominio").value;
-        resultado.textContent = "Executando diagnóstico...";
+    const btn = document.getElementById("btn");
+    const resultado = document.getElementById("resultado");
+    const loading = document.getElementById("loading");
+    const barra = document.getElementById("barra");
 
-        try {
-          const data = await diagnosticarDominio(dominio);
-          resultado.textContent = JSON.stringify(data, null, 2);
-        } catch (e) {
-          resultado.textContent = "Erro ao executar diagnóstico";
-        }
-      });
-    </script>
-  </body>
-</html>
+    btn.addEventListener("click", async () => {
+      const dominio = document.getElementById("dominio").value;
+
+      resultado.textContent = "";
+      loading.style.display = "block";
+      barra.style.width = "0%";
+
+      let progresso = 0;
+      const timer = setInterval(() => {
+        progresso = Math.min(progresso + 10, 90);
+        barra.style.width = progresso + "%";
+      }, 1000);
+
+      try {
+        const data = await diagnosticarDominio(dominio);
+        clearInterval(timer);
+        barra.style.width = "100%";
+        loading.style.display = "none";
+
+        resultado.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        clearInterval(timer);
+        loading.style.display = "none";
+        resultado.textContent = "❌ Erro ao executar diagnóstico";
+      }
+    });
+  </script>
+</body>
