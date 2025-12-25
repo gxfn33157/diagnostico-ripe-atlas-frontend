@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import "./App.css";
-
-/* ---------- TIPOS ---------- */
 
 interface DNSRecord {
   type: string;
@@ -40,16 +38,42 @@ interface DiagnosticoResponse {
   timestamp: string;
 }
 
-/* ---------- COMPONENTE ---------- */
+function calcularStatusGeral(resultado: DiagnosticoResponse) {
+  if (resultado.tcp.status !== "online") {
+    return { label: "INDISPONÍVEL", className: "status-down" };
+  }
+
+  const probes = resultado.globalping?.probes ?? [];
+  if (probes.length === 0) {
+    return { label: "EM ANÁLISE", className: "status-warn" };
+  }
+
+  const falhas = probes.filter(
+    (p) => p.status !== "finished" || p.rtt_ms === null
+  ).length;
+
+  const lentos = probes.filter(
+    (p) => p.rtt_ms !== null && p.rtt_ms > 300
+  ).length;
+
+  const total = probes.length;
+
+  if (falhas / total >= 0.5) {
+    return { label: "INDISPONÍVEL", className: "status-down" };
+  }
+
+  if (lentos / total >= 0.3) {
+    return { label: "INSTÁVEL", className: "status-warn" };
+  }
+
+  return { label: "OK", className: "status-ok" };
+}
 
 function App() {
   const [dominio, setDominio] = useState("");
-  const [resultado, setResultado] =
-    useState<DiagnosticoResponse | null>(null);
+  const [resultado, setResultado] = useState<DiagnosticoResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-
-  /* ---------- DISPARA DIAGNÓSTICO ---------- */
 
   async function diagnosticar() {
     if (!dominio) return;
@@ -68,65 +92,18 @@ function App() {
         }
       );
 
-      if (!res.ok) throw new Error("Erro no backend");
+      if (!res.ok) throw new Error();
 
       const data: DiagnosticoResponse = await res.json();
       setResultado(data);
     } catch {
       setErro("Erro ao executar diagnóstico");
+    } finally {
       setLoading(false);
     }
   }
 
-  /* ---------- AUTO-REFRESH GLOBALPING ---------- */
-
-  useEffect(() => {
-    if (!resultado?.globalping?.measurement_id) return;
-
-    const measurementId = resultado.globalping.measurement_id;
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(
-          `https://diagnostico-backend-vercel.vercel.app/api/globalping-summary/${measurementId}`
-        );
-
-        const data = await res.json();
-
-        setResultado((prev) =>
-          prev
-            ? {
-                ...prev,
-                globalping: {
-                  measurement_id: measurementId,
-                  probes: data.summary.map((p: any) => ({
-                    continente: p.continent,
-                    pais: p.country,
-                    cidade: p.city,
-                    isp: p.isp,
-                    status: p.status,
-                    rtt_ms: p.rtt,
-                  })),
-                },
-              }
-            : prev
-        );
-
-        if (data.status === "finished") {
-          clearInterval(interval);
-          setLoading(false);
-        }
-      } catch {
-        clearInterval(interval);
-        setErro("Erro ao atualizar Globalping");
-        setLoading(false);
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [resultado?.globalping?.measurement_id]);
-
-  /* ---------- UI ---------- */
+  const statusGeral = resultado ? calcularStatusGeral(resultado) : null;
 
   return (
     <div className="container">
@@ -146,11 +123,16 @@ function App() {
 
       {erro && <p className="error">{erro}</p>}
 
+      {resultado && statusGeral && (
+        <div className={`status-geral ${statusGeral.className}`}>
+          STATUS GERAL: {statusGeral.label}
+        </div>
+      )}
+
       {resultado && (
         <div className="resultado">
           <h2>{resultado.dominio}</h2>
 
-          {/* DNS */}
           <h3>DNS</h3>
           <table>
             <thead>
@@ -171,7 +153,6 @@ function App() {
             </tbody>
           </table>
 
-          {/* TCP */}
           <h3>TCP</h3>
           <table>
             <thead>
@@ -184,68 +165,11 @@ function App() {
             <tbody>
               <tr>
                 <td>{resultado.tcp.port}</td>
-                <td
-                  className={
-                    resultado.tcp.status === "online" ? "ok" : "error"
-                  }
-                >
-                  {resultado.tcp.status}
-                </td>
+                <td>{resultado.tcp.status}</td>
                 <td>{resultado.tcp.latency_ms ?? "-"}</td>
               </tr>
             </tbody>
           </table>
-
-          {/* GLOBALPING */}
-          {resultado.globalping && (
-            <>
-              <h3>Globalping (Teste Global)</h3>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>Continente</th>
-                    <th>País</th>
-                    <th>Cidade</th>
-                    <th>ISP</th>
-                    <th>Status</th>
-                    <th>RTT (ms)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resultado.globalping.probes.map((p, i) => (
-                    <tr key={i}>
-                      <td>{p.continente}</td>
-                      <td>{p.pais}</td>
-                      <td>{p.cidade}</td>
-                      <td>{p.isp}</td>
-                      <td
-                        className={
-                          p.status === "finished"
-                            ? "ok"
-                            : p.status === "in-progress"
-                            ? "warn"
-                            : "error"
-                        }
-                      >
-                        {p.status}
-                      </td>
-                      <td>{p.rtt_ms ?? "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <p className="info">
-                * As medições globais atualizam automaticamente.
-              </p>
-            </>
-          )}
-
-          <p className="timestamp">
-            Executado em:{" "}
-            {new Date(resultado.timestamp).toLocaleString()}
-          </p>
         </div>
       )}
     </div>
