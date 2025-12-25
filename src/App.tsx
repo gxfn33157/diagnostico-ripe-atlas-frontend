@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import "./styles.css";
 
 interface DNSRecord {
@@ -14,7 +14,7 @@ interface TCPResult {
   latency_ms: number | null;
 }
 
-interface GlobalPingSummaryItem {
+interface GlobalPingProbe {
   continente: string;
   pais: string;
   cidade: string;
@@ -25,7 +25,8 @@ interface GlobalPingSummaryItem {
 
 interface GlobalPingResult {
   measurement_id: string;
-  probes: GlobalPingSummaryItem[];
+  probes: GlobalPingProbe[];
+  status?: string;
 }
 
 interface DiagnosticoResponse {
@@ -41,10 +42,9 @@ interface DiagnosticoResponse {
 function App() {
   const [dominio, setDominio] = useState("");
   const [resultado, setResultado] = useState<DiagnosticoResponse | null>(null);
-  const [globalpingFinal, setGlobalpingFinal] =
-    useState<GlobalPingSummaryItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [gpLoading, setGpLoading] = useState(false);
 
   async function diagnosticar() {
     if (!dominio) return;
@@ -52,7 +52,6 @@ function App() {
     setLoading(true);
     setErro(null);
     setResultado(null);
-    setGlobalpingFinal(null);
 
     try {
       const res = await fetch(
@@ -68,6 +67,10 @@ function App() {
 
       const data: DiagnosticoResponse = await res.json();
       setResultado(data);
+
+      if (data.globalping?.measurement_id) {
+        buscarGlobalPing(data.globalping.measurement_id);
+      }
     } catch {
       setErro("Erro ao executar diagnóstico");
     } finally {
@@ -75,13 +78,8 @@ function App() {
     }
   }
 
-  /**
-   * 🔁 AUTO-REFRESH GLOBALPING
-   */
-  useEffect(() => {
-    if (!resultado?.globalping?.measurement_id) return;
-
-    const id = resultado.globalping.measurement_id;
+  async function buscarGlobalPing(id: string) {
+    setGpLoading(true);
 
     const interval = setInterval(async () => {
       try {
@@ -89,21 +87,33 @@ function App() {
           `https://diagnostico-backend-vercel.vercel.app/api/globalping-summary/${id}`
         );
 
-        if (!res.ok) return;
-
         const data = await res.json();
 
+        if (data.summary) {
+          setResultado((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  globalping: {
+                    measurement_id: id,
+                    probes: data.summary,
+                    status: data.status,
+                  },
+                }
+              : prev
+          );
+        }
+
         if (data.status === "finished") {
-          setGlobalpingFinal(data.summary);
           clearInterval(interval);
+          setGpLoading(false);
         }
       } catch {
-        // silêncio proposital
+        clearInterval(interval);
+        setGpLoading(false);
       }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [resultado?.globalping?.measurement_id]);
+    }, 4000);
+  }
 
   return (
     <div className="container">
@@ -112,7 +122,7 @@ function App() {
       <div className="form">
         <input
           type="text"
-          placeholder="ex: google.com"
+          placeholder="ex: youtube.com"
           value={dominio}
           onChange={(e) => setDominio(e.target.value)}
         />
@@ -127,7 +137,6 @@ function App() {
         <div className="resultado">
           <h2>{resultado.dominio}</h2>
 
-          {/* DNS */}
           <h3>DNS</h3>
           <table>
             <thead>
@@ -148,19 +157,11 @@ function App() {
             </tbody>
           </table>
 
-          {/* TCP */}
           <h3>TCP</h3>
           <table>
-            <thead>
-              <tr>
-                <th>Porta</th>
-                <th>Status</th>
-                <th>Latência (ms)</th>
-              </tr>
-            </thead>
             <tbody>
               <tr>
-                <td>{resultado.tcp.port}</td>
+                <td>443</td>
                 <td className={resultado.tcp.status === "online" ? "ok" : "error"}>
                   {resultado.tcp.status}
                 </td>
@@ -169,48 +170,49 @@ function App() {
             </tbody>
           </table>
 
-          {/* GLOBALPING */}
-          <h3>Globalping (Teste Global)</h3>
+          {resultado.globalping && (
+            <>
+              <h3>Globalping (Teste Global)</h3>
 
-          {!globalpingFinal && (
-            <p className="info">Executando medições globais...</p>
-          )}
+              {gpLoading && (
+                <p className="info">⏳ Coletando medições globais...</p>
+              )}
 
-          {globalpingFinal && (
-            <table>
-              <thead>
-                <tr>
-                  <th>Continente</th>
-                  <th>País</th>
-                  <th>Cidade</th>
-                  <th>ISP</th>
-                  <th>Status</th>
-                  <th>RTT (ms)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {globalpingFinal.map((p, i) => (
-                  <tr key={i}>
-                    <td>{p.continente}</td>
-                    <td>{p.pais}</td>
-                    <td>{p.cidade}</td>
-                    <td>{p.isp}</td>
-                    <td
-                      className={
-                        p.status === "finished"
-                          ? "ok"
-                          : p.status === "in-progress"
-                          ? "warn"
-                          : "error"
-                      }
-                    >
-                      {p.status}
-                    </td>
-                    <td>{p.rtt_ms ?? "-"}</td>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Continente</th>
+                    <th>País</th>
+                    <th>Cidade</th>
+                    <th>ISP</th>
+                    <th>Status</th>
+                    <th>RTT (ms)</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {resultado.globalping.probes.map((p, i) => (
+                    <tr key={i}>
+                      <td>{p.continente}</td>
+                      <td>{p.pais}</td>
+                      <td>{p.cidade}</td>
+                      <td>{p.isp}</td>
+                      <td
+                        className={
+                          p.status === "finished"
+                            ? "ok"
+                            : p.status === "in-progress"
+                            ? "warn"
+                            : "error"
+                        }
+                      >
+                        {p.status}
+                      </td>
+                      <td>{p.rtt_ms ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
 
           <p className="timestamp">
