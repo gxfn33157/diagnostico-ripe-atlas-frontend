@@ -1,6 +1,157 @@
 /* ================================
-   STATUS GERAL DO DIAGNÓSTICO
-   ================================ */
+   RESET BÁSICO
+================================ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  background-color: #f4f6f8;
+  color: #333;
+}
+
+/* ================================
+   CONTAINER PRINCIPAL
+================================ */
+
+.container {
+  max-width: 1100px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 24px 32px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 24px;
+  color: #0a3d62;
+}
+
+h2 {
+  margin: 16px 0 8px;
+  color: #1e3799;
+}
+
+h3 {
+  margin: 20px 0 8px;
+  color: #3c6382;
+}
+
+/* ================================
+   FORMULÁRIO
+================================ */
+
+.form {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.form input {
+  flex: 1;
+  padding: 10px;
+  font-size: 15px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+.form button {
+  padding: 10px 18px;
+  font-size: 15px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  background-color: #1e3799;
+  color: #fff;
+  transition: background-color 0.2s;
+}
+
+.form button:hover {
+  background-color: #0c2461;
+}
+
+.form button:disabled {
+  background-color: #999;
+  cursor: not-allowed;
+}
+
+/* ================================
+   ERROS E INFO
+================================ */
+
+.error {
+  color: #c0392b;
+  margin-bottom: 12px;
+  font-weight: bold;
+}
+
+.info {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #555;
+}
+
+.timestamp {
+  margin-top: 20px;
+  font-size: 12px;
+  color: #777;
+  text-align: right;
+}
+
+/* ================================
+   TABELAS
+================================ */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+thead {
+  background-color: #eaeff5;
+}
+
+th,
+td {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  text-align: center;
+  font-size: 14px;
+}
+
+th {
+  font-weight: bold;
+}
+
+/* ================================
+   STATUS (OK / WARN / ERROR)
+================================ */
+
+.ok {
+  color: #155724;
+  font-weight: bold;
+}
+
+.warn {
+  color: #856404;
+  font-weight: bold;
+}
+
+.error {
+  color: #721c24;
+  font-weight: bold;
+}
+
+/* ================================
+   STATUS GERAL DO SITE
+================================ */
 
 .status-geral {
   padding: 12px;
@@ -27,4 +178,32 @@
   background-color: #f8d7da;
   color: #721c24;
   border: 1px solid #f5c6cb;
+}
+
+/* ================================
+   GLOBALPING
+================================ */
+
+.globalping-table td {
+  font-size: 13px;
+}
+
+.globalping-table tr:hover {
+  background-color: #f1f5f9;
+}
+
+/* ================================
+   RESPONSIVO
+================================ */
+
+@media (max-width: 768px) {
+  .form {
+    flex-direction: column;
+  }
+
+  th,
+  td {
+    font-size: 12px;
+    padding: 6px;
+  }
 }
