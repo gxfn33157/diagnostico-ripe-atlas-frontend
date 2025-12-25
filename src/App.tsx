@@ -1,12 +1,13 @@
 import { useState } from "react";
 
 /* =======================
-   TIPAGENS
+   TIPOS
 ======================= */
 
 interface DNSRecord {
-  address: string;
-  ttl: number;
+  address?: string;
+  value?: string;
+  ttl?: number;
   type: string;
 }
 
@@ -28,18 +29,15 @@ interface GlobalPingProbe {
 interface DiagnosticoResponse {
   dominio: string;
   status: string;
-  origem: string;
   dns: DNSRecord[];
   tcp: TCPInfo;
   globalping: {
     measurement_id: string;
     probes: GlobalPingProbe[];
   };
-  timestamp: string;
 }
 
 interface GlobalPingSummaryResponse {
-  target: string;
   status: string;
   summary: GlobalPingProbe[];
 }
@@ -50,55 +48,57 @@ interface GlobalPingSummaryResponse {
 
 export default function App() {
   const [dominio, setDominio] = useState("");
-  const [resultado, setResultado] = useState<DiagnosticoResponse | null>(
-    null
-  );
+  const [resultado, setResultado] = useState<DiagnosticoResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
 
   async function diagnosticar() {
-    if (!dominio) return;
-
     setLoading(true);
-    setErro(null);
     setResultado(null);
+    setMsg("Executando diagnóstico...");
 
     try {
-      // 1️⃣ Chama o backend principal
+      // 1️⃣ Diagnóstico inicial
       const res = await fetch(
         "https://diagnostico-backend-vercel.vercel.app/api/detector",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ dominio }),
         }
       );
 
-      if (!res.ok) {
-        throw new Error("Erro ao consultar backend");
-      }
-
       const data: DiagnosticoResponse = await res.json();
 
-      // 2️⃣ Busca o summary do Globalping
-      if (data.globalping?.measurement_id) {
+      setMsg("Aguardando resultados globais...");
+      data.globalping.probes = [];
+
+      setResultado({ ...data });
+
+      // 2️⃣ Polling do Globalping
+      const measurementId = data.globalping.measurement_id;
+
+      for (let i = 0; i < 7; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+
         const summaryRes = await fetch(
-          `https://diagnostico-backend-vercel.vercel.app/api/globalping-summary/${data.globalping.measurement_id}`
+          `https://diagnostico-backend-vercel.vercel.app/api/globalping-summary/${measurementId}`
         );
 
-        if (summaryRes.ok) {
-          const summaryData: GlobalPingSummaryResponse =
-            await summaryRes.json();
+        if (!summaryRes.ok) continue;
 
-          data.globalping.probes = summaryData.summary;
+        const summary: GlobalPingSummaryResponse =
+          await summaryRes.json();
+
+        if (summary.status === "finished" && summary.summary.length > 0) {
+          data.globalping.probes = summary.summary;
+          setResultado({ ...data });
+          setMsg("Diagnóstico global concluído ✅");
+          break;
         }
       }
-
-      setResultado(data);
-    } catch (e) {
-      setErro("Erro ao executar diagnóstico");
+    } catch {
+      setMsg("Erro ao executar diagnóstico");
     } finally {
       setLoading(false);
     }
@@ -109,31 +109,26 @@ export default function App() {
       <h1>Diagnóstico de Acesso</h1>
 
       <input
-        type="text"
-        placeholder="ex: youtube.com"
         value={dominio}
         onChange={(e) => setDominio(e.target.value)}
+        placeholder="ex: youtube.com"
       />
 
       <button onClick={diagnosticar} disabled={loading}>
-        {loading ? "Diagnosticando..." : "Diagnosticar"}
+        {loading ? "Aguarde..." : "Diagnosticar"}
       </button>
 
-      {erro && <p className="erro">{erro}</p>}
+      <p>{msg}</p>
 
       {resultado && (
         <div className="resultado">
           <h2>{resultado.dominio}</h2>
 
-          <p>
-            <strong>Status:</strong> {resultado.status}
-          </p>
-
           <h3>DNS</h3>
           <ul>
-            {resultado.dns.map((r, i) => (
+            {resultado.dns.map((d, i) => (
               <li key={i}>
-                {r.type} — {r.address} (TTL {r.ttl})
+                {d.type} — {d.address || d.value}
               </li>
             ))}
           </ul>
@@ -147,7 +142,7 @@ export default function App() {
           <h3>Globalping</h3>
 
           {resultado.globalping.probes.length === 0 ? (
-            <p>Nenhum resultado global disponível.</p>
+            <p>Coletando medições globais...</p>
           ) : (
             <table>
               <thead>
