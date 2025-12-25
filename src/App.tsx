@@ -1,138 +1,109 @@
 import { useState } from "react";
-import "./styles.css";
 
-interface DiagnosticoResponse {
-  dominio: string;
-  status_geral: string;
-  problema_rota_internacional: boolean;
-  continentes: Record<string, any>;
-  texto_noc: string;
-  globalping?: {
-    measurement_id?: string;
-  };
-  timestamp: string;
-}
+const BACKEND_URL =
+  "https://diagnostico-backend-vercel.vercel.app/api/detector";
 
-function App() {
+export default function App() {
   const [dominio, setDominio] = useState("");
-  const [resultado, setResultado] = useState<DiagnosticoResponse | null>(null);
+  const [resultado, setResultado] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [erro, setErro] = useState<string | null>(null);
+  const [mensagem, setMensagem] = useState("");
 
-  async function diagnosticar() {
-    if (!dominio) return;
-
+  async function executarDiagnostico() {
     setLoading(true);
-    setErro(null);
     setResultado(null);
-    setProgress(0);
+    setMensagem("Iniciando diagnóstico...");
 
-    try {
-      // 1️⃣ Chamada inicial
-      const res = await fetch(
-        "https://diagnostico-backend-vercel.vercel.app/api/detector",
-        {
+    const inicio = Date.now();
+    const TEMPO_MAX = 30000; // 30 segundos
+    const INTERVALO = 5000; // 5 segundos
+
+    async function consultar() {
+      try {
+        const resp = await fetch(BACKEND_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ dominio }),
+        });
+
+        if (!resp.ok) {
+          throw new Error("Erro na API");
         }
-      );
 
-      const data: DiagnosticoResponse = await res.json();
-      setResultado(data);
+        const data = await resp.json();
+        console.log("Resposta backend:", data);
 
-      const measurementId = data.globalping?.measurement_id;
-      if (!measurementId) {
-        setLoading(false);
-        return;
-      }
+        setResultado(data);
 
-      // 2️⃣ Polling Globalping (até 30s)
-      let elapsed = 0;
-      const interval = 5000;
-      const maxTime = 30000;
+        // Se já tem resultado final
+        if (
+          data.status_geral &&
+          data.status_geral !== "Instável" &&
+          data.texto_noc
+        ) {
+          setMensagem("Diagnóstico concluído");
+          setLoading(false);
+          return;
+        }
 
-      const timer = setInterval(async () => {
-        elapsed += interval;
-        setProgress(Math.min((elapsed / maxTime) * 100, 100));
-
-        const gp = await fetch(
-          `https://diagnostico-backend-vercel.vercel.app/api/globalping-summary/${measurementId}`
-        ).then(r => r.json());
-
-        if (gp.status === "finished") {
-          clearInterval(timer);
-
-          setResultado(prev =>
-            prev
-              ? {
-                  ...prev,
-                  continentes: gp.continentes ?? {},
-                  status_geral: gp.status_geral ?? prev.status_geral,
-                  texto_noc: gp.texto_noc ?? prev.texto_noc,
-                }
-              : prev
+        // Ainda processando
+        if (Date.now() - inicio < TEMPO_MAX) {
+          setMensagem("Aguardando medições globais...");
+          setTimeout(consultar, INTERVALO);
+        } else {
+          setMensagem(
+            "Medição ainda em processamento. Tente novamente em instantes."
           );
-
-          setProgress(100);
           setLoading(false);
         }
-
-        if (elapsed >= maxTime) {
-          clearInterval(timer);
-          setLoading(false);
-        }
-      }, interval);
-
-    } catch {
-      setErro("Erro ao executar diagnóstico");
-      setLoading(false);
+      } catch (err) {
+        console.error(err);
+        setMensagem("Erro ao executar diagnóstico");
+        setLoading(false);
+      }
     }
+
+    consultar();
   }
 
   return (
-    <div className="container">
-      <h1>Diagnóstico de Acesso</h1>
+    <div style={{ padding: 20, fontFamily: "Arial" }}>
+      <h2>Diagnóstico de Conectividade</h2>
 
-      <div className="form">
-        <input
-          placeholder="ex: youtube.com"
-          value={dominio}
-          onChange={e => setDominio(e.target.value)}
-        />
-        <button onClick={diagnosticar} disabled={loading}>
-          {loading ? "Diagnosticando..." : "Diagnosticar"}
-        </button>
-      </div>
+      <input
+        type="text"
+        placeholder="Digite o domínio (ex: youtube.com)"
+        value={dominio}
+        onChange={(e) => setDominio(e.target.value)}
+        style={{ padding: 8, width: 300 }}
+      />
 
-      {loading && (
-        <div className="progress">
-          <div className="bar" style={{ width: `${progress}%` }} />
-          <span>{Math.round(progress)}%</span>
-        </div>
-      )}
+      <br />
+      <br />
 
-      {erro && <p className="error">{erro}</p>}
+      <button
+        onClick={executarDiagnostico}
+        disabled={loading || !dominio}
+        style={{ padding: "8px 16px" }}
+      >
+        {loading ? "Diagnosticando..." : "Diagnosticar"}
+      </button>
+
+      <p>{mensagem}</p>
 
       {resultado && (
-        <div className="resultado">
-          <h2>{resultado.dominio}</h2>
-
-          <p className={`status ${resultado.status_geral.toLowerCase()}`}>
-            Status geral: {resultado.status_geral}
-          </p>
-
-          <pre className="noc">{resultado.texto_noc}</pre>
-
-          <p className="timestamp">
-            Executado em:{" "}
-            {new Date(resultado.timestamp).toLocaleString()}
-          </p>
-        </div>
+        <pre
+          style={{
+            background: "#f4f4f4",
+            padding: 15,
+            marginTop: 20,
+            maxHeight: 400,
+            overflow: "auto",
+          }}
+        >
+          {JSON.stringify(resultado, null, 2)}
+        </pre>
       )}
     </div>
   );
 }
-
-export default App;
