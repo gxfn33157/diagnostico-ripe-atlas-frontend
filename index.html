@@ -4,14 +4,7 @@
   <input id="dominio" placeholder="ex: google.com" />
   <button id="btn">Diagnosticar</button>
 
-  <div id="loading" style="display:none; margin-top:10px;">
-    🔄 Executando diagnóstico global...
-    <div
-      id="barra"
-      style="width:0%; height:10px; background:#4caf50; margin-top:5px;"
-    ></div>
-  </div>
-
+  <p id="status"></p>
   <pre id="resultado">Aguardando...</pre>
 
   <script type="module">
@@ -19,33 +12,25 @@
 
     const btn = document.getElementById("btn");
     const resultado = document.getElementById("resultado");
-    const loading = document.getElementById("loading");
-    const barra = document.getElementById("barra");
+    const status = document.getElementById("status");
 
     btn.addEventListener("click", async () => {
       const dominio = document.getElementById("dominio").value;
 
       resultado.textContent = "";
-      loading.style.display = "block";
-      barra.style.width = "0%";
-
-      let progresso = 0;
-      const timer = setInterval(() => {
-        progresso = Math.min(progresso + 10, 90);
-        barra.style.width = progresso + "%";
-      }, 1000);
+      status.textContent = "🔍 Executando diagnóstico global...";
+      btn.disabled = true;
 
       try {
         const data = await diagnosticarDominio(dominio);
-        clearInterval(timer);
-        barra.style.width = "100%";
-        loading.style.display = "none";
 
+        status.textContent = `Status geral: ${data.status_geral}`;
         resultado.textContent = JSON.stringify(data, null, 2);
       } catch (e) {
-        clearInterval(timer);
-        loading.style.display = "none";
-        resultado.textContent = "❌ Erro ao executar diagnóstico";
+        status.textContent = "❌ Erro ao executar diagnóstico";
+        resultado.textContent = "";
+      } finally {
+        btn.disabled = false;
       }
     });
   </script>
