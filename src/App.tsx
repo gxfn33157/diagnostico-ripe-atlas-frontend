@@ -1,55 +1,23 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import "./styles.css";
-
-interface DNSRecord {
-  type: string;
-  address?: string;
-  value?: string;
-  ttl?: number;
-}
-
-interface TCPResult {
-  status: string;
-  port: number;
-  latency_ms: number | null;
-}
-
-interface GlobalPingProbe {
-  continente: string;
-  pais: string;
-  cidade: string;
-  isp: string;
-  status: string;
-  rtt_ms: number | null;
-}
-
-interface GlobalPingResult {
-  measurement_id: string;
-  probes: GlobalPingProbe[];
-}
 
 interface DiagnosticoResponse {
   dominio: string;
-  status: string;
-  origem: string;
-  dns: DNSRecord[];
-  tcp: TCPResult;
-  globalping?: GlobalPingResult;
+  status_geral: string;
+  problema_rota_internacional: boolean;
+  continentes: Record<string, any>;
+  texto_noc: string;
+  globalping?: {
+    measurement_id?: string;
+  };
   timestamp: string;
-}
-
-interface GlobalPingSummary {
-  target: string;
-  status: string;
-  summary: GlobalPingProbe[];
 }
 
 function App() {
   const [dominio, setDominio] = useState("");
   const [resultado, setResultado] = useState<DiagnosticoResponse | null>(null);
-  const [globalpingFinal, setGlobalpingFinal] =
-    useState<GlobalPingSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [erro, setErro] = useState<string | null>(null);
 
   async function diagnosticar() {
@@ -58,9 +26,10 @@ function App() {
     setLoading(true);
     setErro(null);
     setResultado(null);
-    setGlobalpingFinal(null);
+    setProgress(0);
 
     try {
+      // 1️⃣ Chamada inicial
       const res = await fetch(
         "https://diagnostico-backend-vercel.vercel.app/api/detector",
         {
@@ -70,42 +39,57 @@ function App() {
         }
       );
 
-      if (!res.ok) throw new Error();
-
       const data: DiagnosticoResponse = await res.json();
       setResultado(data);
+
+      const measurementId = data.globalping?.measurement_id;
+      if (!measurementId) {
+        setLoading(false);
+        return;
+      }
+
+      // 2️⃣ Polling Globalping (até 30s)
+      let elapsed = 0;
+      const interval = 5000;
+      const maxTime = 30000;
+
+      const timer = setInterval(async () => {
+        elapsed += interval;
+        setProgress(Math.min((elapsed / maxTime) * 100, 100));
+
+        const gp = await fetch(
+          `https://diagnostico-backend-vercel.vercel.app/api/globalping-summary/${measurementId}`
+        ).then(r => r.json());
+
+        if (gp.status === "finished") {
+          clearInterval(timer);
+
+          setResultado(prev =>
+            prev
+              ? {
+                  ...prev,
+                  continentes: gp.continentes ?? {},
+                  status_geral: gp.status_geral ?? prev.status_geral,
+                  texto_noc: gp.texto_noc ?? prev.texto_noc,
+                }
+              : prev
+          );
+
+          setProgress(100);
+          setLoading(false);
+        }
+
+        if (elapsed >= maxTime) {
+          clearInterval(timer);
+          setLoading(false);
+        }
+      }, interval);
+
     } catch {
       setErro("Erro ao executar diagnóstico");
-    } finally {
       setLoading(false);
     }
   }
-
-  // 🔁 AUTO-REFRESH DO GLOBALPING
-  useEffect(() => {
-    if (!resultado?.globalping?.measurement_id) return;
-
-    const id = resultado.globalping.measurement_id;
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(
-          `https://diagnostico-backend-vercel.vercel.app/api/globalping-summary/${id}`
-        );
-
-        if (!res.ok) return;
-
-        const data: GlobalPingSummary = await res.json();
-
-        if (data.status === "finished") {
-          setGlobalpingFinal(data);
-          clearInterval(interval);
-        }
-      } catch {}
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [resultado]);
 
   return (
     <div className="container">
@@ -113,15 +97,21 @@ function App() {
 
       <div className="form">
         <input
-          type="text"
-          placeholder="ex: google.com"
+          placeholder="ex: youtube.com"
           value={dominio}
-          onChange={(e) => setDominio(e.target.value)}
+          onChange={e => setDominio(e.target.value)}
         />
         <button onClick={diagnosticar} disabled={loading}>
           {loading ? "Diagnosticando..." : "Diagnosticar"}
         </button>
       </div>
+
+      {loading && (
+        <div className="progress">
+          <div className="bar" style={{ width: `${progress}%` }} />
+          <span>{Math.round(progress)}%</span>
+        </div>
+      )}
 
       {erro && <p className="error">{erro}</p>}
 
@@ -129,87 +119,15 @@ function App() {
         <div className="resultado">
           <h2>{resultado.dominio}</h2>
 
-          <h3>DNS</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th>Valor</th>
-                <th>TTL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {resultado.dns.map((d, i) => (
-                <tr key={i}>
-                  <td>{d.type}</td>
-                  <td>{d.address || d.value}</td>
-                  <td>{d.ttl ?? "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p className={`status ${resultado.status_geral.toLowerCase()}`}>
+            Status geral: {resultado.status_geral}
+          </p>
 
-          <h3>TCP</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Porta</th>
-                <th>Status</th>
-                <th>Latência (ms)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>{resultado.tcp.port}</td>
-                <td
-                  className={
-                    resultado.tcp.status === "online" ? "ok" : "error"
-                  }
-                >
-                  {resultado.tcp.status}
-                </td>
-                <td>{resultado.tcp.latency_ms ?? "-"}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <h3>Globalping</h3>
-
-          {!globalpingFinal && (
-            <p className="info">
-              ⏳ Aguardando medições globais (auto-atualizando)…
-            </p>
-          )}
-
-          {globalpingFinal && (
-            <table>
-              <thead>
-                <tr>
-                  <th>Continente</th>
-                  <th>País</th>
-                  <th>Cidade</th>
-                  <th>ISP</th>
-                  <th>Status</th>
-                  <th>RTT (ms)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {globalpingFinal.summary.map((p, i) => (
-                  <tr key={i}>
-                    <td>{p.continente}</td>
-                    <td>{p.pais}</td>
-                    <td>{p.cidade}</td>
-                    <td>{p.isp}</td>
-                    <td className="ok">{p.status}</td>
-                    <td>{p.rtt_ms ?? "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <pre className="noc">{resultado.texto_noc}</pre>
 
           <p className="timestamp">
-            Executado em: {new Date(resultado.timestamp).toLocaleString()}
+            Executado em:{" "}
+            {new Date(resultado.timestamp).toLocaleString()}
           </p>
         </div>
       )}
