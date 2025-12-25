@@ -38,6 +38,21 @@ interface DiagnosticoResponse {
   timestamp: string;
 }
 
+interface GlobalPingSummaryItem {
+  continente: string;
+  pais: string;
+  cidade: string;
+  isp: string;
+  status: string;
+  rtt_ms: number | null;
+}
+
+interface GlobalPingSummaryResponse {
+  target: string;
+  status: string;
+  summary: GlobalPingSummaryItem[];
+}
+
 function calcularStatusGeral(resultado: DiagnosticoResponse) {
   if (resultado.tcp.status !== "online") {
     return { label: "INDISPONÍVEL", className: "status-down" };
