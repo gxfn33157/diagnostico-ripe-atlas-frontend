@@ -1,37 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Diagnóstico de Conectividade</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
 <body>
-  <h1>Diagnóstico de Acesso</h1>
 
-  <input id="dominio" placeholder="ex: google.com" />
-  <button id="btn">Diagnosticar</button>
+  <div class="container">
+    <h1>Diagnóstico de Acesso</h1>
 
-  <p id="status"></p>
-  <pre id="resultado">Aguardando...</pre>
+    <div class="form">
+      <input id="dominio" placeholder="ex: youtube.com" />
+      <button id="btn">Diagnosticar</button>
+    </div>
+
+    <div id="status" class="status hidden"></div>
+
+    <div id="loading" class="loading hidden">
+      Executando diagnóstico global...
+    </div>
+
+    <div id="resultado"></div>
+  </div>
 
   <script type="module">
-    import { diagnosticarDominio } from "/src/api.ts";
+    import { diagnosticarDominio } from "./api.js";
 
     const btn = document.getElementById("btn");
+    const dominioInput = document.getElementById("dominio");
     const resultado = document.getElementById("resultado");
-    const status = document.getElementById("status");
+    const statusEl = document.getElementById("status");
+    const loading = document.getElementById("loading");
+
+    function agruparPorContinente(summary) {
+      const grupos = {};
+      summary.forEach(p => {
+        if (!grupos[p.continente]) grupos[p.continente] = [];
+        grupos[p.continente].push(p);
+      });
+      return grupos;
+    }
 
     btn.addEventListener("click", async () => {
-      const dominio = document.getElementById("dominio").value;
+      const dominio = dominioInput.value.trim();
+      if (!dominio) return alert("Informe um domínio");
 
-      resultado.textContent = "";
-      status.textContent = "🔍 Executando diagnóstico global...";
-      btn.disabled = true;
+      resultado.innerHTML = "";
+      statusEl.className = "status hidden";
+      loading.classList.remove("hidden");
 
       try {
         const data = await diagnosticarDominio(dominio);
+        loading.classList.add("hidden");
 
-        status.textContent = `Status geral: ${data.status_geral}`;
-        resultado.textContent = JSON.stringify(data, null, 2);
+        statusEl.textContent = `Status geral: ${data.status_geral}`;
+        statusEl.className = `status ${data.status_geral.toLowerCase()}`;
+
+        if (!data.globalping?.summary?.length) {
+          resultado.innerHTML = `<p>${data.texto_noc}</p>`;
+          return;
+        }
+
+        const grupos = agruparPorContinente(data.globalping.summary);
+
+        for (const continente in grupos) {
+          const card = document.createElement("div");
+          card.className = "card";
+
+          card.innerHTML = `<h2>${continente}</h2>`;
+
+          grupos[continente].forEach(p => {
+            const row = document.createElement("div");
+            row.className = "row";
+            row.innerHTML = `
+              <strong>${p.pais}</strong> - ${p.cidade}<br/>
+              Status: ${p.status}
+            `;
+            card.appendChild(row);
+          });
+
+          resultado.appendChild(card);
+        }
+
       } catch (e) {
-        status.textContent = "❌ Erro ao executar diagnóstico";
-        resultado.textContent = "";
-      } finally {
-        btn.disabled = false;
+        loading.classList.add("hidden");
+        alert("Erro ao executar diagnóstico");
+        console.error(e);
       }
     });
   </script>
+
 </body>
+</html>
