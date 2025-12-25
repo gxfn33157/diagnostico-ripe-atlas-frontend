@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
+
+/* ---------- TIPOS ---------- */
 
 interface DNSRecord {
   type: string;
@@ -38,11 +40,16 @@ interface DiagnosticoResponse {
   timestamp: string;
 }
 
+/* ---------- COMPONENTE ---------- */
+
 function App() {
   const [dominio, setDominio] = useState("");
-  const [resultado, setResultado] = useState<DiagnosticoResponse | null>(null);
+  const [resultado, setResultado] =
+    useState<DiagnosticoResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  /* ---------- DISPARA DIAGNÓSTICO ---------- */
 
   async function diagnosticar() {
     if (!dominio) return;
@@ -56,25 +63,70 @@ function App() {
         "https://diagnostico-backend-vercel.vercel.app/api/detector",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ dominio }),
         }
       );
 
-      if (!res.ok) {
-        throw new Error("Erro ao consultar backend");
-      }
+      if (!res.ok) throw new Error("Erro no backend");
 
       const data: DiagnosticoResponse = await res.json();
       setResultado(data);
-    } catch (e) {
+    } catch {
       setErro("Erro ao executar diagnóstico");
-    } finally {
       setLoading(false);
     }
   }
+
+  /* ---------- AUTO-REFRESH GLOBALPING ---------- */
+
+  useEffect(() => {
+    if (!resultado?.globalping?.measurement_id) return;
+
+    const measurementId = resultado.globalping.measurement_id;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(
+          `https://diagnostico-backend-vercel.vercel.app/api/globalping-summary/${measurementId}`
+        );
+
+        const data = await res.json();
+
+        setResultado((prev) =>
+          prev
+            ? {
+                ...prev,
+                globalping: {
+                  measurement_id: measurementId,
+                  probes: data.summary.map((p: any) => ({
+                    continente: p.continent,
+                    pais: p.country,
+                    cidade: p.city,
+                    isp: p.isp,
+                    status: p.status,
+                    rtt_ms: p.rtt,
+                  })),
+                },
+              }
+            : prev
+        );
+
+        if (data.status === "finished") {
+          clearInterval(interval);
+          setLoading(false);
+        }
+      } catch {
+        clearInterval(interval);
+        setErro("Erro ao atualizar Globalping");
+        setLoading(false);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [resultado?.globalping?.measurement_id]);
+
+  /* ---------- UI ---------- */
 
   return (
     <div className="container">
@@ -185,13 +237,14 @@ function App() {
               </table>
 
               <p className="info">
-                * As medições globais podem levar alguns segundos para concluir.
+                * As medições globais atualizam automaticamente.
               </p>
             </>
           )}
 
           <p className="timestamp">
-            Executado em: {new Date(resultado.timestamp).toLocaleString()}
+            Executado em:{" "}
+            {new Date(resultado.timestamp).toLocaleString()}
           </p>
         </div>
       )}
